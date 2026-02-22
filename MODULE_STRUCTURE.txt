@@ -1,0 +1,168 @@
+FPL ENHANCED MODEL — MODULAR ARCHITECTURE
+===========================================
+
+The monolithic run_enhanced_model.py (1651 lines) has been refactored into 6 specialized modules:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         MODULE BREAKDOWN                                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+
+1. config.py (147 lines)
+   ├─ All imports (pandas, numpy, pulp with try/except, warnings)
+   ├─ Path constants (BASE_DIR, FBREF_DIR, FPL_API_DIR, OUTPUT_DIR, MY_TEAM_DIR)
+   ├─ FPL scoring rules (SCORING dict with 7 point types)
+   ├─ Position & team mappings (POS_MAP, TEAM_NAME_MAP, FIXTURE_TEAM_MAP)
+   ├─ Name matching helpers (NAME_ALIASES, AMBIGUOUS_LASTNAMES)
+   ├─ Squad rules (SQUAD_RULES, TEAM_COLORS for HTML)
+   └─ Utilities (safe_float helper, HAS_PULP flag for conditional LP)
+
+2. data_loader.py (417 lines)
+   ├─ FBref data loading:
+   │  ├─ _standardize_columns() — handle multi-header CSVs
+   │  ├─ load_single_team_csv() — parse team folder CSVs
+   │  └─ load_all_fbref_data() — aggregate all 20 teams
+   ├─ FPL API data loading:
+   │  └─ load_fpl_api_data() — load 10+ CSV files (stats, prices, injuries, fixtures, etc.)
+   ├─ Name matching (8-pass algorithm):
+   │  ├─ map_position() — convert FBref pos to FPL pos
+   │  ├─ _merge_row() — combine FBref + FPL data
+   │  ├─ _match_players() — 8-pass matching logic
+   │  └─ build_unified_database() — orchestrate entire merge + filters
+
+3. scoring.py (345 lines)
+   ├─ Home/Away profiles:
+   │  └─ _build_home_away_profiles() — team-specific attack/defense multipliers
+   ├─ Clean sheet probability:
+   │  └─ _calc_cs_prob() — fixture-specific CS odds for DEF/GK
+   ├─ Fixture parsing:
+   │  ├─ _parse_fixtures() — extract upcoming schedule
+   │  └─ _enrich_fdr() — compute FDR from team stats
+   └─ Enhanced scoring model:
+      └─ calculate_enhanced_scores() — 7-signal model combining:
+         (1) Historical PPG, (2) Underlying stats, (3) xG regression,
+         (4) Form momentum, (5) Fixture difficulty, (6) Captain value,
+         (7) Differential boost
+
+4. optimizer.py (365 lines)
+   ├─ Main optimization:
+   │  └─ optimize_squad() — two-tier strategy (XI points + bench reliability)
+   ├─ LP solver (PuLP):
+   │  └─ _lp_optimize() — binary variables + constraints (formation, budget, 3-per-team)
+   ├─ Greedy fallback:
+   │  └─ _greedy_optimize() — when PuLP unavailable
+   ├─ Post-optimization:
+   │  └─ _finalize() — pick captain (highest GW1 xPts), build result dict
+   ├─ Console reporting:
+   │  ├─ print_squad() — ASCII pitch display with captain tags
+   │  ├─ print_value_picks() — top 8 per position (value score sorted)
+   │  ├─ print_regression_candidates() — xG underperformers
+   │  └─ print_differentials() — low ownership, strong quality
+   └─ HTML visualization:
+      └─ generate_html_lineup() — full interactive webpage with pitch, bench, mentions
+
+5. transfers.py (363 lines)
+   ├─ Load team data:
+   │  └─ load_my_team() — read my_team.csv & settings from My Team/ folder
+   ├─ Squad matching:
+   │  └─ match_my_team_to_predictions() — 5-pass fuzzy name matching
+   │     (handles accents, dots, abbreviations like "B.Fernandes")
+   ├─ Transfer recommendation:
+   │  └─ recommend_transfers() — find best out→in swaps:
+   │     • All same-position candidates within budget
+   │     • Respects 3-per-team rule
+   │     • Ranks by net xPts gain
+   │     • Shows -4 hit penalty for paid transfers
+   │     • Recommends best 2-transfer combos
+   │     • Exports top 50 to CSV
+   └─ Entry point:
+      └─ run_transfer_analysis() — orchestrates the full flow
+
+6. run.py (136 lines)
+   ├─ Full docstring from original (explains 7-signal model + LP strategy)
+   ├─ main() function:
+   │  ├─ STEP 1: Load FBref data (20 teams)
+   │  ├─ STEP 2: Load FPL API data (10+ files)
+   │  ├─ STEP 3: Build unified database (name matching + filters)
+   │  ├─ STEP 4: Run enhanced scoring (predictions for all players)
+   │  ├─ STEP 5: Optimize squad (xi + bench)
+   │  └─ Exports: predictions CSV, squad CSV, HTML lineup
+   ├─ Entry point (__main__):
+   │  ├─ CLI args: --budget, --gameweeks, --min-minutes
+   │  └─ STEP 6: Transfer analysis (if my_team.csv exists)
+   └─ All imports from other modules
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            KEY DESIGN PATTERNS                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+
+1. Dependency Flow:
+   config ← imports everything
+   data_loader ← imports from config
+   scoring ← imports from config
+   optimizer ← imports from config
+   transfers ← imports from config
+   run ← imports from all modules
+
+2. Token Efficiency:
+   • Each module ≤420 lines (readable in one session)
+   • Comments explain each distinctive section
+   • Only relevant imports per module (no circular deps)
+   • Can modify scoring rules in config.py without reloading data_loader
+
+3. Modularity Benefits:
+   • Modify scoring thresholds → only touch scoring.py
+   • Change squad constraints → only touch optimizer.py
+   • Improve name matching → only touch data_loader.py
+   • Add new transfers logic → only touch transfers.py
+   • No need to understand entire codebase for small changes
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              FILE LOCATIONS                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+
+/sessions/sleepy-charming-feynman/mnt/FPL tool/Code/
+├── config.py                    (constants & configs)
+├── data_loader.py               (FBref + FPL API)
+├── scoring.py                   (7-signal model)
+├── optimizer.py                 (LP + greedy + reporting)
+├── transfers.py                 (transfer recommender)
+├── run.py                        (main entry point)
+├── run_enhanced_model.py         (BACKUP — original monolithic version)
+└── MODULE_STRUCTURE.txt         (this file)
+
+BASE_DIR = /sessions/sleepy-charming-feynman/mnt/FPL tool
+  (parent of Code/ folder, set in config.py)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              USAGE                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+
+python3 run.py                      # Default: £103m budget, 5 GWs
+python3 run.py --budget 100         # Custom budget
+python3 run.py --gameweeks 8        # Custom lookahead
+python3 run.py --budget 95 --gameweeks 10  # Both custom
+
+Output files saved to: /sessions/sleepy-charming-feynman/mnt/FPL tool/data/Results/
+  ├── enhanced_predictions.csv      (all player scores + signals)
+  ├── enhanced_squad.csv            (optimized 15-player squad)
+  ├── squad_lineup.html             (interactive visualization)
+  └── transfer_recommendations.csv  (top 50 transfers if team exists)
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            TESTING CHECKLIST                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+
+✓ All imports successful (no missing dependencies)
+✓ BASE_DIR correctly points to project root
+✓ HAS_PULP flag works (fallback to greedy if PuLP unavailable)
+✓ Complete pipeline runs end-to-end
+✓ All data loads (FBref + FPL API)
+✓ Name matching works (8-pass algorithm tested)
+✓ Scoring model produces expected results
+✓ Optimizer selects valid 15-player squad
+✓ Captain selection logic works
+✓ HTML output generated
+✓ Transfer analysis runs (if my_team.csv exists)
+✓ CLI arguments parsed correctly
+✓ All output files created in Results folder
+
